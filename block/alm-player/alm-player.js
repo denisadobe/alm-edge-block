@@ -1,7 +1,7 @@
 const DEFAULT_BASE_URL = 'https://captivateprime.adobe.com';
 const TOKEN_STORAGE_KEY = 'alm-access-token';
 const TOKEN_EXPIRY_KEY = 'alm-access-token-expiry';
-const TOKEN_IDENTITY_KEY = 'alm-access-token-identity';
+const SESSION_ID_KEY = 'alm-session-id';
 
 const getPlaceholderKey = (obj) => obj?.almAuthUrl
   || obj?.almauthurl
@@ -73,15 +73,14 @@ const fetchRefreshToken = async (authUrl) => {
   try {
     const refreshUrl = buildRefreshUrl(authUrl);
     if (!refreshUrl) return null;
-    const identity = localStorage.getItem(TOKEN_IDENTITY_KEY);
-    const url = identity ? `${refreshUrl}?identity=${encodeURIComponent(identity)}` : refreshUrl;
+    const sessionId = localStorage.getItem(SESSION_ID_KEY);
+    const url = sessionId ? `${refreshUrl}?state=${encodeURIComponent(sessionId)}` : refreshUrl;
     const res = await fetch(url, { method: 'POST' });
     if (!res.ok) return null;
     const json = await res.json();
     const token = json?.access_token || json?.accessToken || null;
     const expiresIn = Number(json?.expires_in || json?.expiresIn || 0);
-    const identityResp = json?.identity?.value || identity || null;
-    return token ? { token, expiresIn, identity: identityResp } : null;
+    return token ? { token, expiresIn } : null;
   } catch (e) {
     return null;
   }
@@ -92,13 +91,27 @@ const normalizeCourseId = (courseId) => {
   return courseId.includes(':') ? courseId : `course:${courseId}`;
 };
 
-const buildEmbedUrl = ({ baseUrl, courseId, accessToken }) => {
-  const url = new URL('/app/player', baseUrl || DEFAULT_BASE_URL);
+const buildEmbedUrl = ({ courseId, accessToken }) => {
+  const url = new URL('/app/player', DEFAULT_BASE_URL);
   url.searchParams.set('lo_id', normalizeCourseId(courseId));
   if (accessToken) {
     url.searchParams.set('access_token', accessToken);
   }
   return url;
+};
+
+const isTokenValid = async (accessToken) => {
+  if (!accessToken) return false;
+  try {
+    const url = new URL('/oauth/token/check', DEFAULT_BASE_URL);
+    url.searchParams.set('access_token', accessToken);
+    const res = await fetch(url.href, { credentials: 'omit' });
+    if (!res.ok) return true;
+    const json = await res.json();
+    return !json?.error;
+  } catch (e) {
+    return true;
+  }
 };
 
 const renderPlayer = (block, config) => {
@@ -126,8 +139,6 @@ export default function decorate(block) {
     .filter((v) => v !== undefined);
 
   const courseId = values[0];
-  const baseUrl = values[1];
-  const inlineAccessToken = values[2];
 
   if (!courseId) {
     block.textContent = 'Missing courseId for ALM player block.';
@@ -144,12 +155,11 @@ export default function decorate(block) {
     storedExpiry = null;
   }
   const isExpired = storedExpiry && Date.now() > storedExpiry;
-  const accessToken = inlineAccessToken || (isExpired ? null : storedToken);
+  const accessToken = isExpired ? null : storedToken;
 
   const config = {
     courseId,
     accessToken,
-    baseUrl,
   };
 
   if (!accessToken) {
@@ -158,7 +168,7 @@ export default function decorate(block) {
     notice.className = 'alm-player__notice';
     notice.innerHTML = `
       <p>Access token is missing.</p>
-      <p class="alm-player__auth-status">Preparing OAuth login...</p>
+      <p class="alm-player__auth-status">Preparing login...</p>
     `;
     block.append(notice);
 
@@ -181,7 +191,7 @@ export default function decorate(block) {
             notice.innerHTML = `
               <p>Access token is missing.</p>
               <p class="alm-player__auth-status">
-                Missing <code>almAuthUrl</code> placeholder. Configure it to your Runtime action URL.
+                Missing <code>almAuthUrl</code> placeholder.
               </p>
             `;
             return;
@@ -194,9 +204,6 @@ export default function decorate(block) {
               if (auto.expiresIn) {
                 localStorage.setItem(TOKEN_EXPIRY_KEY, String(Date.now() + auto.expiresIn * 1000));
               }
-              if (auto.identity) {
-                localStorage.setItem(TOKEN_IDENTITY_KEY, auto.identity);
-              }
             } catch (e) {}
             renderPlayer(block, { ...config, accessToken: auto.token });
             return;
@@ -205,19 +212,12 @@ export default function decorate(block) {
           notice.innerHTML = `
             <p>Access token is missing.</p>
             <div class="alm-player__auth-actions">
-              <label class="alm-player__auth-label">
-                Email (optional)
-                <input type="email" class="alm-player__auth-email" placeholder="user@company.com" />
-              </label>
               <button type="button" class="alm-player__auth-button">Open OAuth login</button>
             </div>
-            <p class="alm-player__auth-url">URL:</p>
-            <code class="alm-player__auth-code">${authUrlValue}</code>
             <p class="alm-player__auth-code-result" hidden></p>
           `;
 
           const popupButton = notice.querySelector('.alm-player__auth-button');
-          const emailInput = notice.querySelector('.alm-player__auth-email');
           const resultEl = notice.querySelector('.alm-player__auth-code-result');
           const onMessage = (event) => {
             const data = event?.data;
@@ -227,21 +227,17 @@ export default function decorate(block) {
               const expiresIn = Number(data.payload?.expires_in || data.payload?.expiresIn || 0);
               resultEl.hidden = false;
               resultEl.textContent = token
-                ? 'Access token received. Loading player...'
-                : 'Received OAuth response, but no access_token found.';
-            if (token) {
-              try {
-                localStorage.setItem(TOKEN_STORAGE_KEY, token);
-                if (expiresIn) {
-                  localStorage.setItem(TOKEN_EXPIRY_KEY, String(Date.now() + expiresIn * 1000));
+                ? 'Loading player...'
+                : 'Login completed, but no access_token found.';
+              if (token) {
+                try {
+                  localStorage.setItem(TOKEN_STORAGE_KEY, token);
+                  if (expiresIn) {
+                    localStorage.setItem(TOKEN_EXPIRY_KEY, String(Date.now() + expiresIn * 1000));
+                  }
+                } catch (e) {
+                  // ignore storage failures
                 }
-                const identity = data.payload?.identity?.value;
-                if (identity) {
-                  localStorage.setItem(TOKEN_IDENTITY_KEY, identity);
-                }
-              } catch (e) {
-                // ignore storage failures
-              }
                 renderPlayer(block, { ...config, accessToken: token });
               }
               window.removeEventListener('message', onMessage);
@@ -251,15 +247,17 @@ export default function decorate(block) {
 
           popupButton.addEventListener('click', () => {
             let finalUrl = authUrlValue;
-            const email = emailInput?.value?.trim();
-            if (email) {
-              try {
-                const u = new URL(finalUrl);
-                u.searchParams.set('email', email);
-                finalUrl = u.href;
-              } catch (e) {
-                // ignore
-              }
+            let sessionId = localStorage.getItem(SESSION_ID_KEY);
+            if (!sessionId) {
+              sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+              localStorage.setItem(SESSION_ID_KEY, sessionId);
+            }
+            try {
+              const u = new URL(finalUrl);
+              u.searchParams.set('state', sessionId);
+              finalUrl = u.href;
+            } catch (e) {
+              // ignore
             }
             const popup = window.open(
               finalUrl,
@@ -268,8 +266,30 @@ export default function decorate(block) {
             );
             if (!popup) {
               resultEl.hidden = false;
-              resultEl.textContent = 'Popup blocked. Please allow popups and try again.';
+              resultEl.textContent = 'Popup blocked. Please allow popups.';
+              return;
             }
+
+            const startedAt = Date.now();
+            const poll = window.setInterval(async () => {
+              if (Date.now() - startedAt > 60_000) {
+                window.clearInterval(poll);
+                return;
+              }
+              const refreshed = await fetchRefreshToken(authUrlValue);
+              if (refreshed?.token) {
+                window.clearInterval(poll);
+                try {
+                  localStorage.setItem(TOKEN_STORAGE_KEY, refreshed.token);
+                  if (refreshed.expiresIn) {
+                    localStorage.setItem(TOKEN_EXPIRY_KEY, String(Date.now() + refreshed.expiresIn * 1000));
+                  }
+                } catch (e) {
+                  // ignore
+                }
+                renderPlayer(block, { ...config, accessToken: refreshed.token });
+              }
+            }, 1000);
           });
         } catch (e) {
           notice.querySelector('.alm-player__auth-status').textContent = 'Failed to build OAuth URL.';
@@ -282,10 +302,29 @@ export default function decorate(block) {
   }
 
   const observer = new IntersectionObserver((entries) => {
-    if (entries.some((entry) => entry.isIntersecting)) {
-      observer.disconnect();
-      renderPlayer(block, config);
-    }
+    if (!entries.some((entry) => entry.isIntersecting)) return;
+    observer.disconnect();
+    isTokenValid(accessToken).then((valid) => {
+      if (valid) {
+        renderPlayer(block, config);
+        return;
+      }
+      try {
+        localStorage.removeItem(TOKEN_STORAGE_KEY);
+        localStorage.removeItem(TOKEN_EXPIRY_KEY);
+      } catch (e) {
+        // ignore
+      }
+      block.textContent = '';
+      const notice = document.createElement('div');
+      notice.className = 'alm-player__notice';
+      notice.innerHTML = `
+        <p>Access token expired.</p>
+        <p class="alm-player__auth-status">Please login again.</p>
+      `;
+      block.append(notice);
+      decorate(block);
+    });
   });
 
   observer.observe(block);

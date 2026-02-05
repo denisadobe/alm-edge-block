@@ -8,7 +8,7 @@ const { Core } = require('@adobe/aio-sdk')
 const { errorResponse, stringParameters, checkMissingRequestInputs } = require('../utils')
 
 const REFRESH_TOKEN_KEY = 'alm-refresh-token'
-const refreshKeyForIdentity = (identity) => `${REFRESH_TOKEN_KEY}:${identity}`
+const refreshKeyForSession = (sessionId) => `${REFRESH_TOKEN_KEY}:${sessionId}`
 
 // main function that will be executed by Adobe I/O Runtime
 async function main (params) {
@@ -123,11 +123,12 @@ async function main (params) {
       }
     }
 
-    const identity = params.email || body.user_id || null
-    if (body.refresh_token && identity) {
+    // Store refresh token for auto-refresh
+    const sessionId = params.state || null
+    if (body.refresh_token && sessionId) {
       try {
         const state = await stateLib.init()
-        await state.put(refreshKeyForIdentity(identity), body.refresh_token, { ttl: 60 * 60 * 24 * 30 })
+        await state.put(refreshKeyForSession(sessionId), body.refresh_token, { ttl: 60 * 60 * 24 * 30 })
       } catch (e) {
         logger.warn('Failed to store refresh token')
       }
@@ -135,7 +136,7 @@ async function main (params) {
 
     const payload = JSON.stringify({
       ...body,
-      identity: identity ? { type: params.email ? 'email' : 'user_id', value: identity } : null
+      session: sessionId ? { type: 'state', value: sessionId } : null
     })
     const html = `<!DOCTYPE html>
 <html lang="en">

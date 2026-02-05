@@ -4,7 +4,7 @@ const { Core } = require('@adobe/aio-sdk')
 const { errorResponse, stringParameters } = require('../utils')
 
 const REFRESH_TOKEN_KEY = 'alm-refresh-token'
-const refreshKeyForIdentity = (identity) => `${REFRESH_TOKEN_KEY}:${identity}`
+const refreshKeyForSession = (sessionId) => `${REFRESH_TOKEN_KEY}:${sessionId}`
 
 async function main (params) {
   const logger = Core.Logger('main', { level: params.LOG_LEVEL || 'info' })
@@ -32,8 +32,8 @@ async function main (params) {
     }
 
     const state = await stateLib.init()
-    const identity = params.identity || params.email || params.user_id
-    const refreshKey = identity ? refreshKeyForIdentity(identity) : REFRESH_TOKEN_KEY
+    const sessionId = params.state || params.session
+    const refreshKey = sessionId ? refreshKeyForSession(sessionId) : REFRESH_TOKEN_KEY
     const refreshToken = await state.get(refreshKey)
 
     if (!refreshToken) {
@@ -75,7 +75,7 @@ async function main (params) {
 
     const responseBody = {
       ...body,
-      identity: identity ? { type: params.email ? 'email' : (params.user_id ? 'user_id' : 'identity'), value: identity } : null
+      session: sessionId ? { type: 'state', value: sessionId } : null
     }
 
     return { statusCode: 200, headers: corsHeaders, body: responseBody }

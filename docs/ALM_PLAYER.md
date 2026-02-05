@@ -1,96 +1,90 @@
-# ALM Player Block Setup
+# ALM Player Block (AEM Edge)
 
-## 1) Add Block Files
-Copy the `block/alm-player/` folder into your site repo at:
-```
-blocks/alm-player/
-```
+This block embeds Adobe Learning Manager (ALM) courses using the Captivate Prime player and an Adobe I/O Runtime OAuth helper.
 
-## 2) Register the Block in UE
-Add the block definition to these files in your site repo:
+**Quick Summary**
+1. Deploy the Runtime actions (OAuth + refresh helper).
+2. Add the `almAuthUrl` placeholder pointing to the Runtime action.
+3. Use the `ALM Player` block with a `courseId`.
 
-### `component-definition.json`
-Add an entry under the `Blocks` group:
-```
-{
-  "title": "ALM Player",
-  "id": "alm-player",
-  "plugins": {
-    "xwalk": {
-      "page": {
-        "resourceType": "core/franklin/components/block/v1/block",
-        "template": {
-          "name": "ALM Player",
-          "model": "alm-player"
-        }
-      }
-    }
-  }
-}
-```
+---
 
-### `component-models.json`
-Add model:
-```
-{
-  "id": "alm-player",
-  "fields": [
-    {
-      "component": "text",
-      "valueType": "string",
-      "required": true,
-      "name": "courseId",
-      "label": "Course ID",
-      "description": "Use v2 format like course:123456 (numeric also accepted). OAuth config is read from placeholders (almAuthUrl)."
-    }
-  ]
-}
-```
+## File Structure (what to share)
 
-### `component-filters.json`
-Allow block in section (optional):
-```
-"alm-player"
-```
+Copy these files to any repo that should support the block:
 
-## 3) Deploy Runtime OAuth + Refresh
-Go to `runtime/app/` and deploy:
-```
-aio app deploy
-```
+- `blocks/alm-player/alm-player.js`
+- `blocks/alm-player/alm-player.css`
+- `blocks/alm-player/_alm-player.json`
+- `component-definition.json` (registers the block)
+- `component-models.json` (adds the block model)
+- `component-filters.json` (if you want it in the Section block list)
 
-Set these env vars in `runtime/app/.env` (do not commit):
-- `ALM_CLIENT_ID`
-- `ALM_CLIENT_SECRET`
-- `ALM_BASE_URL` (default `https://captivateprime.adobe.com`)
+---
 
-Runtime action URL example:
+## Runtime (OAuth Helper)
+
+This runs in Adobe I/O Runtime and exchanges OAuth codes for `access_token`. It also
+stores a `refresh_token` to enable background refresh.
+
+### Action URL (example)
 ```
 https://<namespace>.adobeioruntime.net/api/v1/web/alm-runtime/alm-oauth
 ```
 
-## 4) Add Placeholder
-Create a `placeholders` page in your site and add:
+### Environment Variables
+Set in the Runtime project `.env` (do not commit secrets):
+- `ALM_CLIENT_ID`
+- `ALM_CLIENT_SECRET`
+- `ALM_BASE_URL` (default: `https://captivateprime.adobe.com`)
+
+### Deploy
+```
+aio app deploy
+```
+
+---
+
+## Placeholders (per site)
+
+Create a `placeholders` page in the site and add this entry:
+
 - Key: `almAuthUrl`
-- Text: `<runtime-url>`
+- Text: `https://<namespace>.adobeioruntime.net/api/v1/web/alm-runtime/alm-oauth`
 
-Optional for multi-user environments:
-- Enter the user email in the popup before login to scope refresh tokens per user.
+Multi-user environments:
+- The runtime scopes refresh tokens by a per-browser session id (sent via OAuth `state`).
 
-Check:
+Validate:
 ```
 https://<site>.aem.page/placeholders.json
 ```
+Must include `almAuthUrl`.
 
-## 5) Use the Block
+---
+
+## Using the Block
+
+Add the block and provide only the `courseId` (v2 format):
+
 ```
 ALM Player
 course:123456
 ```
 
-The block first tries `/alm-refresh` in the background. If no refresh token exists,
-it opens OAuth in a popup, stores `access_token` + `expires_in` in `localStorage`,
-and loads the player across all course blocks.
+The block:
+1. Tries `/alm-refresh` in the background.
+2. If no refresh token exists, opens OAuth login in a popup.
+3. Stores `access_token` + `expires_in` in `localStorage` (shared across tabs).
+4. Loads the player for any course block on the site.
 
 Multi-user note:
-- Use the `email` query param on `almAuthUrl` so each user gets their own refresh token.
+- Refresh tokens are scoped by a per-browser session id (OAuth `state`).
+
+---
+
+## Notes
+
+- Tokens expire. The block uses `expires_in` to refresh automatically. If refresh fails, open the popup again.
+- `courseId` can be numeric; it will be normalized to `course:<id>`.
+- Default player URL uses `https://captivateprime.adobe.com`.
