@@ -69,14 +69,18 @@ const buildRefreshUrl = (authUrl) => {
 };
 
 const fetchRefreshToken = async (authUrl) => {
-  const refreshUrl = buildRefreshUrl(authUrl);
-  if (!refreshUrl) return null;
-  const res = await fetch(refreshUrl, { method: 'POST' });
-  if (!res.ok) return null;
-  const json = await res.json();
-  const token = json?.access_token || json?.accessToken || null;
-  const expiresIn = Number(json?.expires_in || json?.expiresIn || 0);
-  return token ? { token, expiresIn } : null;
+  try {
+    const refreshUrl = buildRefreshUrl(authUrl);
+    if (!refreshUrl) return null;
+    const res = await fetch(refreshUrl, { method: 'POST' });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const token = json?.access_token || json?.accessToken || null;
+    const expiresIn = Number(json?.expires_in || json?.expiresIn || 0);
+    return token ? { token, expiresIn } : null;
+  } catch (e) {
+    return null;
+  }
 };
 
 const normalizeCourseId = (courseId) => {
