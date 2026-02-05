@@ -160,78 +160,93 @@ export default function decorate(block) {
 
     getAuthUrlFromPlaceholders()
       .then(async (authUrl) => {
-        if (!authUrl) {
+        try {
+          let authUrlValue = authUrl;
+          if (!authUrlValue) {
+            const resp = await fetch('/placeholders.json');
+            if (resp.ok) {
+              const json = await resp.json();
+              authUrlValue = extractPlaceholderValue(json, 'almAuthUrl')
+                || extractPlaceholderValue(json, 'almauthurl')
+                || extractPlaceholderValue(json, 'almRuntimeUrl')
+                || extractPlaceholderValue(json, 'almruntimeurl');
+            }
+          }
+
+          if (!authUrlValue) {
+            notice.innerHTML = `
+              <p>Access token is missing.</p>
+              <p class="alm-player__auth-status">
+                Missing <code>almAuthUrl</code> placeholder. Configure it to your Runtime action URL.
+              </p>
+            `;
+            return;
+          }
+
+          const auto = await fetchRefreshToken(authUrlValue);
+          if (auto?.token) {
+            try {
+              localStorage.setItem(TOKEN_STORAGE_KEY, auto.token);
+              if (auto.expiresIn) {
+                localStorage.setItem(TOKEN_EXPIRY_KEY, String(Date.now() + auto.expiresIn * 1000));
+              }
+            } catch (e) {}
+            renderPlayer(block, { ...config, accessToken: auto.token });
+            return;
+          }
+
           notice.innerHTML = `
             <p>Access token is missing.</p>
-            <p class="alm-player__auth-status">
-              Missing <code>almAuthUrl</code> placeholder. Configure it to your Runtime action URL.
-            </p>
+            <div class="alm-player__auth-actions">
+              <button type="button" class="alm-player__auth-button">Open OAuth login</button>
+            </div>
+            <p class="alm-player__auth-url">URL:</p>
+            <code class="alm-player__auth-code">${authUrlValue}</code>
+            <p class="alm-player__auth-code-result" hidden></p>
           `;
-          return;
-        }
 
-        const authUrlValue = authUrl;
-        const auto = await fetchRefreshToken(authUrlValue);
-        if (auto?.token) {
-          try {
-            localStorage.setItem(TOKEN_STORAGE_KEY, auto.token);
-            if (auto.expiresIn) {
-              localStorage.setItem(TOKEN_EXPIRY_KEY, String(Date.now() + auto.expiresIn * 1000));
-            }
-          } catch (e) {}
-          renderPlayer(block, { ...config, accessToken: auto.token });
-          return;
-        }
-
-        notice.innerHTML = `
-          <p>Access token is missing.</p>
-          <div class="alm-player__auth-actions">
-            <button type="button" class="alm-player__auth-button">Open OAuth login</button>
-          </div>
-          <p class="alm-player__auth-url">URL:</p>
-          <code class="alm-player__auth-code">${authUrlValue}</code>
-          <p class="alm-player__auth-code-result" hidden></p>
-        `;
-
-        const popupButton = notice.querySelector('.alm-player__auth-button');
-        const resultEl = notice.querySelector('.alm-player__auth-code-result');
-        const onMessage = (event) => {
-          const data = event?.data;
-          if (!data?.type) return;
-          if (data.type === 'alm-oauth-token') {
-            const token = data.payload?.access_token || data.payload?.accessToken;
-            const expiresIn = Number(data.payload?.expires_in || data.payload?.expiresIn || 0);
-            resultEl.hidden = false;
-            resultEl.textContent = token
-              ? 'Access token received. Loading player...'
-              : 'Received OAuth response, but no access_token found.';
-            if (token) {
-              try {
-                localStorage.setItem(TOKEN_STORAGE_KEY, token);
-                if (expiresIn) {
-                  localStorage.setItem(TOKEN_EXPIRY_KEY, String(Date.now() + expiresIn * 1000));
+          const popupButton = notice.querySelector('.alm-player__auth-button');
+          const resultEl = notice.querySelector('.alm-player__auth-code-result');
+          const onMessage = (event) => {
+            const data = event?.data;
+            if (!data?.type) return;
+            if (data.type === 'alm-oauth-token') {
+              const token = data.payload?.access_token || data.payload?.accessToken;
+              const expiresIn = Number(data.payload?.expires_in || data.payload?.expiresIn || 0);
+              resultEl.hidden = false;
+              resultEl.textContent = token
+                ? 'Access token received. Loading player...'
+                : 'Received OAuth response, but no access_token found.';
+              if (token) {
+                try {
+                  localStorage.setItem(TOKEN_STORAGE_KEY, token);
+                  if (expiresIn) {
+                    localStorage.setItem(TOKEN_EXPIRY_KEY, String(Date.now() + expiresIn * 1000));
+                  }
+                } catch (e) {
+                  // ignore storage failures
                 }
-              } catch (e) {
-                // ignore storage failures
+                renderPlayer(block, { ...config, accessToken: token });
               }
-              renderPlayer(block, { ...config, accessToken: token });
+              window.removeEventListener('message', onMessage);
             }
-            window.removeEventListener('message', onMessage);
-          }
-        };
-        window.addEventListener('message', onMessage);
+          };
+          window.addEventListener('message', onMessage);
 
-        popupButton.addEventListener('click', () => {
-          const popup = window.open(
-            authUrlValue,
-            'alm-oauth',
-            'width=720,height=720'
-          );
-          if (!popup) {
-            resultEl.hidden = false;
-            resultEl.textContent = 'Popup blocked. Please allow popups and try again.';
-          }
-        });
+          popupButton.addEventListener('click', () => {
+            const popup = window.open(
+              authUrlValue,
+              'alm-oauth',
+              'width=720,height=720'
+            );
+            if (!popup) {
+              resultEl.hidden = false;
+              resultEl.textContent = 'Popup blocked. Please allow popups and try again.';
+            }
+          });
+        } catch (e) {
+          notice.querySelector('.alm-player__auth-status').textContent = 'Failed to build OAuth URL.';
+        }
       })
       .catch(() => {
         notice.querySelector('.alm-player__auth-status').textContent = 'Failed to build OAuth URL.';
