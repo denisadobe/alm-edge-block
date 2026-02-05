@@ -3,8 +3,12 @@
 */
 
 const fetch = require('node-fetch')
+const stateLib = require('@adobe/aio-lib-state')
 const { Core } = require('@adobe/aio-sdk')
 const { errorResponse, stringParameters, checkMissingRequestInputs } = require('../utils')
+
+const REFRESH_TOKEN_KEY = 'alm-refresh-token'
+const refreshKeyForIdentity = (identity) => `${REFRESH_TOKEN_KEY}:${identity}`
 
 // main function that will be executed by Adobe I/O Runtime
 async function main (params) {
@@ -119,7 +123,20 @@ async function main (params) {
       }
     }
 
-    const payload = JSON.stringify(body)
+    const identity = params.email || body.user_id || null
+    if (body.refresh_token && identity) {
+      try {
+        const state = await stateLib.init()
+        await state.put(refreshKeyForIdentity(identity), body.refresh_token, { ttl: 60 * 60 * 24 * 30 })
+      } catch (e) {
+        logger.warn('Failed to store refresh token')
+      }
+    }
+
+    const payload = JSON.stringify({
+      ...body,
+      identity: identity ? { type: params.email ? 'email' : 'user_id', value: identity } : null
+    })
     const html = `<!DOCTYPE html>
 <html lang="en">
   <head>

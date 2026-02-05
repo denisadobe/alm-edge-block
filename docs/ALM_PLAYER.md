@@ -74,6 +74,9 @@ Create a `placeholders` page in your site and add:
 - Key: `almAuthUrl`
 - Text: `<runtime-url>`
 
+Optional for multi-user environments:
+- Append `?email=user@company.com` to scope refresh tokens per user.
+
 Check:
 ```
 https://<site>.aem.page/placeholders.json
@@ -88,3 +91,6 @@ course:123456
 The block first tries `/alm-refresh` in the background. If no refresh token exists,
 it opens OAuth in a popup, stores `access_token` + `expires_in` in `localStorage`,
 and loads the player across all course blocks.
+
+Multi-user note:
+- Use the `email` query param on `almAuthUrl` so each user gets their own refresh token.

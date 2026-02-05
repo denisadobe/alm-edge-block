@@ -4,6 +4,7 @@ const { Core } = require('@adobe/aio-sdk')
 const { errorResponse, stringParameters } = require('../utils')
 
 const REFRESH_TOKEN_KEY = 'alm-refresh-token'
+const refreshKeyForIdentity = (identity) => `${REFRESH_TOKEN_KEY}:${identity}`
 
 async function main (params) {
   const logger = Core.Logger('main', { level: params.LOG_LEVEL || 'info' })
@@ -31,7 +32,9 @@ async function main (params) {
     }
 
     const state = await stateLib.init()
-    const refreshToken = await state.get(REFRESH_TOKEN_KEY)
+    const identity = params.identity || params.email || params.user_id
+    const refreshKey = identity ? refreshKeyForIdentity(identity) : REFRESH_TOKEN_KEY
+    const refreshToken = await state.get(refreshKey)
 
     if (!refreshToken) {
       return errorResponse(401, 'Missing refresh token. Please authenticate again.', logger)
@@ -64,13 +67,18 @@ async function main (params) {
 
     if (body.refresh_token) {
       try {
-        await state.put(REFRESH_TOKEN_KEY, body.refresh_token, { ttl: 60 * 60 * 24 * 30 })
+        await state.put(refreshKey, body.refresh_token, { ttl: 60 * 60 * 24 * 30 })
       } catch (e) {
         logger.warn('Failed to update refresh token')
       }
     }
 
-    return { statusCode: 200, headers: corsHeaders, body }
+    const responseBody = {
+      ...body,
+      identity: identity ? { type: params.email ? 'email' : (params.user_id ? 'user_id' : 'identity'), value: identity } : null
+    }
+
+    return { statusCode: 200, headers: corsHeaders, body: responseBody }
   } catch (error) {
     logger.error(error)
     return errorResponse(500, 'server error', logger)

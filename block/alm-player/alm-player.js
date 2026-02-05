@@ -1,6 +1,7 @@
 const DEFAULT_BASE_URL = 'https://captivateprime.adobe.com';
 const TOKEN_STORAGE_KEY = 'alm-access-token';
 const TOKEN_EXPIRY_KEY = 'alm-access-token-expiry';
+const TOKEN_IDENTITY_KEY = 'alm-access-token-identity';
 
 const getPlaceholderKey = (obj) => obj?.almAuthUrl
   || obj?.almauthurl
@@ -72,12 +73,15 @@ const fetchRefreshToken = async (authUrl) => {
   try {
     const refreshUrl = buildRefreshUrl(authUrl);
     if (!refreshUrl) return null;
-    const res = await fetch(refreshUrl, { method: 'POST' });
+    const identity = localStorage.getItem(TOKEN_IDENTITY_KEY);
+    const url = identity ? `${refreshUrl}?identity=${encodeURIComponent(identity)}` : refreshUrl;
+    const res = await fetch(url, { method: 'POST' });
     if (!res.ok) return null;
     const json = await res.json();
     const token = json?.access_token || json?.accessToken || null;
     const expiresIn = Number(json?.expires_in || json?.expiresIn || 0);
-    return token ? { token, expiresIn } : null;
+    const identityResp = json?.identity?.value || identity || null;
+    return token ? { token, expiresIn, identity: identityResp } : null;
   } catch (e) {
     return null;
   }
@@ -190,6 +194,9 @@ export default function decorate(block) {
               if (auto.expiresIn) {
                 localStorage.setItem(TOKEN_EXPIRY_KEY, String(Date.now() + auto.expiresIn * 1000));
               }
+              if (auto.identity) {
+                localStorage.setItem(TOKEN_IDENTITY_KEY, auto.identity);
+              }
             } catch (e) {}
             renderPlayer(block, { ...config, accessToken: auto.token });
             return;
@@ -217,15 +224,19 @@ export default function decorate(block) {
               resultEl.textContent = token
                 ? 'Access token received. Loading player...'
                 : 'Received OAuth response, but no access_token found.';
-              if (token) {
-                try {
-                  localStorage.setItem(TOKEN_STORAGE_KEY, token);
-                  if (expiresIn) {
-                    localStorage.setItem(TOKEN_EXPIRY_KEY, String(Date.now() + expiresIn * 1000));
-                  }
-                } catch (e) {
-                  // ignore storage failures
+            if (token) {
+              try {
+                localStorage.setItem(TOKEN_STORAGE_KEY, token);
+                if (expiresIn) {
+                  localStorage.setItem(TOKEN_EXPIRY_KEY, String(Date.now() + expiresIn * 1000));
                 }
+                const identity = data.payload?.identity?.value;
+                if (identity) {
+                  localStorage.setItem(TOKEN_IDENTITY_KEY, identity);
+                }
+              } catch (e) {
+                // ignore storage failures
+              }
                 renderPlayer(block, { ...config, accessToken: token });
               }
               window.removeEventListener('message', onMessage);
