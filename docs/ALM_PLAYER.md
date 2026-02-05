@@ -86,4 +86,5 @@ course:123456
 ```
 
 The block first tries `/alm-refresh` in the background. If no refresh token exists,
-it opens OAuth in a popup, receives the token, and loads the player.
+it opens OAuth in a popup, stores `access_token` + `expires_in` in `localStorage`,
+and loads the player across all course blocks.

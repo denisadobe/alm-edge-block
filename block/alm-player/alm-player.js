@@ -1,5 +1,6 @@
 const DEFAULT_BASE_URL = 'https://captivateprime.adobe.com';
-const TOKEN_STORAGE_PREFIX = 'alm-access-token';
+const TOKEN_STORAGE_KEY = 'alm-access-token';
+const TOKEN_EXPIRY_KEY = 'alm-access-token-expiry';
 
 const getPlaceholderKey = (obj) => obj?.almAuthUrl
   || obj?.almauthurl
@@ -73,7 +74,9 @@ const fetchRefreshToken = async (authUrl) => {
   const res = await fetch(refreshUrl, { method: 'POST' });
   if (!res.ok) return null;
   const json = await res.json();
-  return json?.access_token || json?.accessToken || null;
+  const token = json?.access_token || json?.accessToken || null;
+  const expiresIn = Number(json?.expires_in || json?.expiresIn || 0);
+  return token ? { token, expiresIn } : null;
 };
 
 const normalizeCourseId = (courseId) => {
@@ -123,14 +126,17 @@ export default function decorate(block) {
     return;
   }
 
-  const storageKey = `${TOKEN_STORAGE_PREFIX}:${courseId}`;
   let storedToken = null;
+  let storedExpiry = null;
   try {
-    storedToken = localStorage.getItem(storageKey);
+    storedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
+    storedExpiry = Number(localStorage.getItem(TOKEN_EXPIRY_KEY) || 0);
   } catch (e) {
     storedToken = null;
+    storedExpiry = null;
   }
-  const accessToken = inlineAccessToken || storedToken;
+  const isExpired = storedExpiry && Date.now() > storedExpiry;
+  const accessToken = inlineAccessToken || (isExpired ? null : storedToken);
 
   const config = {
     courseId,
@@ -161,12 +167,15 @@ export default function decorate(block) {
         }
 
         const authUrlValue = authUrl;
-        const autoToken = await fetchRefreshToken(authUrlValue);
-        if (autoToken) {
+        const auto = await fetchRefreshToken(authUrlValue);
+        if (auto?.token) {
           try {
-            localStorage.setItem(storageKey, autoToken);
+            localStorage.setItem(TOKEN_STORAGE_KEY, auto.token);
+            if (auto.expiresIn) {
+              localStorage.setItem(TOKEN_EXPIRY_KEY, String(Date.now() + auto.expiresIn * 1000));
+            }
           } catch (e) {}
-          renderPlayer(block, { ...config, accessToken: autoToken });
+          renderPlayer(block, { ...config, accessToken: auto.token });
           return;
         }
 
@@ -187,13 +196,17 @@ export default function decorate(block) {
           if (!data?.type) return;
           if (data.type === 'alm-oauth-token') {
             const token = data.payload?.access_token || data.payload?.accessToken;
+            const expiresIn = Number(data.payload?.expires_in || data.payload?.expiresIn || 0);
             resultEl.hidden = false;
             resultEl.textContent = token
               ? 'Access token received. Loading player...'
               : 'Received OAuth response, but no access_token found.';
             if (token) {
               try {
-                localStorage.setItem(storageKey, token);
+                localStorage.setItem(TOKEN_STORAGE_KEY, token);
+                if (expiresIn) {
+                  localStorage.setItem(TOKEN_EXPIRY_KEY, String(Date.now() + expiresIn * 1000));
+                }
               } catch (e) {
                 // ignore storage failures
               }
