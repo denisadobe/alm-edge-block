@@ -7,18 +7,6 @@ const getPlaceholderKey = (obj) => obj?.almAuthUrl
   || obj?.almruntimeurl
   || null;
 
-const ensureHtmlFormat = (url) => {
-  try {
-    const u = new URL(url);
-    if (!u.searchParams.has('format')) {
-      u.searchParams.set('format', 'html');
-    }
-    return u.href;
-  } catch (e) {
-    return url;
-  }
-};
-
 const extractPlaceholderValue = (json, key) => {
   const entry = json?.data?.find((row) => row?.Key === key);
   return entry?.Text || null;
@@ -61,6 +49,31 @@ const getAuthUrlFromPlaceholders = async () => {
   } catch (e) {
     return null;
   }
+};
+
+const buildRefreshUrl = (authUrl) => {
+  try {
+    const u = new URL(authUrl);
+    const parts = u.pathname.split('/').filter(Boolean);
+    if (parts.length > 0) {
+      parts[parts.length - 1] = 'alm-refresh';
+      u.pathname = `/${parts.join('/')}`;
+      u.search = '';
+      return u.href;
+    }
+  } catch (e) {
+    // ignore
+  }
+  return null;
+};
+
+const fetchRefreshToken = async (authUrl) => {
+  const refreshUrl = buildRefreshUrl(authUrl);
+  if (!refreshUrl) return null;
+  const res = await fetch(refreshUrl, { method: 'POST' });
+  if (!res.ok) return null;
+  const json = await res.json();
+  return json?.access_token || json?.accessToken || null;
 };
 
 const normalizeCourseId = (courseId) => {
@@ -113,7 +126,7 @@ export default function decorate(block) {
   const storageKey = `${TOKEN_STORAGE_PREFIX}:${courseId}`;
   let storedToken = null;
   try {
-    storedToken = sessionStorage.getItem(storageKey);
+    storedToken = localStorage.getItem(storageKey);
   } catch (e) {
     storedToken = null;
   }
@@ -136,7 +149,7 @@ export default function decorate(block) {
     block.append(notice);
 
     getAuthUrlFromPlaceholders()
-      .then((authUrl) => {
+      .then(async (authUrl) => {
         if (!authUrl) {
           notice.innerHTML = `
             <p>Access token is missing.</p>
@@ -147,7 +160,16 @@ export default function decorate(block) {
           return;
         }
 
-        const authUrlValue = ensureHtmlFormat(authUrl);
+        const authUrlValue = authUrl;
+        const autoToken = await fetchRefreshToken(authUrlValue);
+        if (autoToken) {
+          try {
+            localStorage.setItem(storageKey, autoToken);
+          } catch (e) {}
+          renderPlayer(block, { ...config, accessToken: autoToken });
+          return;
+        }
+
         notice.innerHTML = `
           <p>Access token is missing.</p>
           <div class="alm-player__auth-actions">
@@ -171,7 +193,7 @@ export default function decorate(block) {
               : 'Received OAuth response, but no access_token found.';
             if (token) {
               try {
-                sessionStorage.setItem(storageKey, token);
+                localStorage.setItem(storageKey, token);
               } catch (e) {
                 // ignore storage failures
               }

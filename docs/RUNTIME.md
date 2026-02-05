@@ -1,7 +1,7 @@
 # Runtime OAuth Helper
 
 ## Purpose
-Handles ALM OAuth on the server side and returns an `access_token` in HTML for the popup.
+Handles ALM OAuth on the server side and refreshes tokens for background use.
 
 ## Setup
 1. Open `runtime/app/.env` and set:
@@ -25,4 +25,5 @@ aio app deploy
 aio app get-url
 ```
 
-Use the returned URL as `almAuthUrl` in placeholders.
+Use the returned URL as `almAuthUrl` in placeholders. The refresh endpoint is
+`/alm-refresh` in the same runtime package.

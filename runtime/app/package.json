@@ -4,6 +4,7 @@
   "private": true,
   "dependencies": {
     "@adobe/aio-sdk": "^6",
+    "@adobe/aio-lib-state": "^5",
     "node-fetch": "^2.6.0",
     "cloudevents": "^4.0.2",
     "uuid": "^8.0.0",

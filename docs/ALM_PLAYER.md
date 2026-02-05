@@ -53,7 +53,7 @@ Allow block in section (optional):
 "alm-player"
 ```
 
-## 3) Deploy Runtime OAuth Helper
+## 3) Deploy Runtime OAuth + Refresh
 Go to `runtime/app/` and deploy:
 ```
 aio app deploy
@@ -85,4 +85,5 @@ ALM Player
 course:123456
 ```
 
-The block opens OAuth in a popup, receives the token, and loads the player.
+The block first tries `/alm-refresh` in the background. If no refresh token exists,
+it opens OAuth in a popup, receives the token, and loads the player.
