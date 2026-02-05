@@ -1,0 +1,20 @@
+application:
+  actions: actions
+  web: web-src
+  runtimeManifest:
+    packages:
+      alm-runtime:
+        license: Apache-2.0
+        actions:
+          alm-oauth:
+            function: actions/alm-oauth/index.js
+            web: 'yes'
+            runtime: nodejs:22
+            inputs:
+              LOG_LEVEL: info
+              ALM_BASE_URL: https://captivateprime.adobe.com
+              ALM_CLIENT_ID: $ALM_CLIENT_ID
+              ALM_CLIENT_SECRET: $ALM_CLIENT_SECRET
+            annotations:
+              require-adobe-auth: false
+              final: true

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ALM OAuth Redirect</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        padding: 24px;
+      }
+      code {
+        display: block;
+        padding: 12px;
+        background: #f4f4f4;
+        border: 1px solid #ddd;
+        word-break: break-all;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>OAuth Code</h1>
+    <p>Copy the code below and exchange it for an access token.</p>
+    <code id="code">Loading...</code>
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code');
+      const codeEl = document.getElementById('code');
+      if (code) {
+        codeEl.textContent = code;
+        if (window.opener && window.opener !== window) {
+          try {
+            window.opener.postMessage({ type: 'alm-oauth-code', code }, '*');
+          } catch (e) {
+            // ignore
+          }
+        }
+      } else {
+        codeEl.textContent = 'No code found in URL.';
+      }
+    </script>
+  </body>
+</html>
