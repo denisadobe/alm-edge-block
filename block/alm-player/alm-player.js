@@ -205,6 +205,10 @@ export default function decorate(block) {
           notice.innerHTML = `
             <p>Access token is missing.</p>
             <div class="alm-player__auth-actions">
+              <label class="alm-player__auth-label">
+                Email (optional)
+                <input type="email" class="alm-player__auth-email" placeholder="user@company.com" />
+              </label>
               <button type="button" class="alm-player__auth-button">Open OAuth login</button>
             </div>
             <p class="alm-player__auth-url">URL:</p>
@@ -213,6 +217,7 @@ export default function decorate(block) {
           `;
 
           const popupButton = notice.querySelector('.alm-player__auth-button');
+          const emailInput = notice.querySelector('.alm-player__auth-email');
           const resultEl = notice.querySelector('.alm-player__auth-code-result');
           const onMessage = (event) => {
             const data = event?.data;
@@ -245,8 +250,19 @@ export default function decorate(block) {
           window.addEventListener('message', onMessage);
 
           popupButton.addEventListener('click', () => {
+            let finalUrl = authUrlValue;
+            const email = emailInput?.value?.trim();
+            if (email) {
+              try {
+                const u = new URL(finalUrl);
+                u.searchParams.set('email', email);
+                finalUrl = u.href;
+              } catch (e) {
+                // ignore
+              }
+            }
             const popup = window.open(
-              authUrlValue,
+              finalUrl,
               'alm-oauth',
               'width=720,height=720'
             );

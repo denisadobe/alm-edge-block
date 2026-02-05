@@ -75,7 +75,7 @@ Create a `placeholders` page in your site and add:
 - Text: `<runtime-url>`
 
 Optional for multi-user environments:
-- Append `?email=user@company.com` to scope refresh tokens per user.
+- Enter the user email in the popup before login to scope refresh tokens per user.
 
 Check:
 ```

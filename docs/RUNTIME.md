@@ -29,4 +29,4 @@ Use the returned URL as `almAuthUrl` in placeholders. The refresh endpoint is
 `/alm-refresh` in the same runtime package.
 
 Optional:
-- Add `?email=user@company.com` to scope refresh tokens per user.
+- The OAuth popup lets users enter their email to scope refresh tokens per user.
