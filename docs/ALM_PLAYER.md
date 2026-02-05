@@ -66,13 +66,13 @@ Set these env vars in `runtime/app/.env` (do not commit):
 
 Runtime action URL example:
 ```
-https://<namespace>.adobeioruntime.net/api/v1/web/alm-runtime/alm-oauth?format=html
+https://<namespace>.adobeioruntime.net/api/v1/web/alm-runtime/alm-oauth
 ```
 
 ## 4) Add Placeholder
 Create a `placeholders` page in your site and add:
 - Key: `almAuthUrl`
-- Text: `<runtime-url>?format=html`
+- Text: `<runtime-url>`
 
 Check:
 ```

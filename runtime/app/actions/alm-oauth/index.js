@@ -59,7 +59,7 @@ async function main (params) {
         return errorResponse(500, 'Missing host header in runtime request', logger)
       }
       const selfUrl = `${proto}://${host}${path}`
-      const redirectUri = params.redirect_uri || `${selfUrl}?format=html`
+      const redirectUri = params.redirect_uri || selfUrl
       const scope = params.scope || 'learner:read,learner:write'
       const state = params.state || 'state1'
 
@@ -119,10 +119,8 @@ async function main (params) {
       }
     }
 
-    const wantsHtml = params.format === 'html' || params.response_format === 'html'
-    if (wantsHtml) {
-      const payload = JSON.stringify(body)
-      const html = `<!DOCTYPE html>
+    const payload = JSON.stringify(body)
+    const html = `<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -152,20 +150,13 @@ async function main (params) {
     </script>
   </body>
 </html>`
-      return {
-        statusCode: 200,
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'text/html; charset=utf-8'
-        },
-        body: html
-      }
-    }
-
     return {
       statusCode: 200,
-      headers: corsHeaders,
-      body
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'text/html; charset=utf-8'
+      },
+      body: html
     }
   } catch (error) {
     logger.error(error)

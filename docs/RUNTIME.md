@@ -25,4 +25,4 @@ aio app deploy
 aio app get-url
 ```
 
-Use the returned URL as `almAuthUrl` in placeholders, adding `?format=html`.
+Use the returned URL as `almAuthUrl` in placeholders.
