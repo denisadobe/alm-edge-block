@@ -1,0 +1,9 @@
+.target-mbox {
+  min-height: 1px;
+}
+
+.target-mbox.target-mbox--fallback picture,
+.target-mbox.target-mbox--fallback img {
+  display: block;
+  width: 100%;
+}
