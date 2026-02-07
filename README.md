@@ -1,4 +1,4 @@
-# Flosi Blocks Kit
+# Custom AEM Edge Blocks
 
 This repo packages reusable AEM Edge blocks and related helpers.
 
